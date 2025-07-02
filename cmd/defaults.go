@@ -1,13 +1,13 @@
 package cmd
 
 import (
-	"github.com/musix/backhaul/internal/config"
+	"github.com/sahmadiut/backhaul/internal/config"
 
 	"github.com/sirupsen/logrus"
 )
 
 const ( // Default values
-	defaultToken          = "musix"
+	defaultToken          = "sahmadiut"
 	defaultChannelSize    = 2048
 	defaultRetryInterval  = 3 // only for client
 	defaultConnectionPool = 8

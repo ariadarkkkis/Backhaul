@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/gorilla/websocket"
-	"github.com/musix/backhaul/internal/web"
+	"github.com/sahmadiut/backhaul/internal/web"
 	"github.com/sirupsen/logrus"
 )
 
