@@ -123,6 +123,24 @@ func (s *Server) Start() {
 
 		wsMuxServer := transport.NewWSMuxServer(s.ctx, wsMuxConfig, s.logger)
 		go wsMuxServer.Start()
+	} else if s.config.Transport == config.HTTPCDN || s.config.Transport == config.HTTPSCDN {
+		httpCdnConfig := &transport.HttpCdnConfig{
+			BindAddr:    s.config.BindAddr,
+			Nodelay:     s.config.Nodelay,
+			KeepAlive:   time.Duration(s.config.Keepalive) * time.Second,
+			Heartbeat:   time.Duration(s.config.Heartbeat) * time.Second,
+			Token:       s.config.Token,
+			ChannelSize: s.config.ChannelSize,
+			Ports:       s.config.Ports,
+			Sniffer:     s.config.Sniffer,
+			WebPort:     s.config.WebPort,
+			SnifferLog:  s.config.SnifferLog,
+			Mode:        s.config.Transport,
+			TLSCertFile: s.config.TLSCertFile,
+			TLSKeyFile:  s.config.TLSKeyFile,
+		}
+		httpCdnServer := transport.NewHttpCdnServer(s.ctx, httpCdnConfig, s.logger)
+		go httpCdnServer.Start()
 
 	} else if s.config.Transport == config.QUIC {
 		quicConfig := &transport.QuicConfig{

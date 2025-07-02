@@ -125,6 +125,24 @@ func (c *Client) Start() {
 		}
 		wsMuxClient := transport.NewWSMuxClient(c.ctx, wsMuxConfig, c.logger)
 		go wsMuxClient.Start()
+	} else if c.config.Transport == config.HTTPCDN || c.config.Transport == config.HTTPSCDN {
+		httpCdnConfig := &transport.HttpCdnClientConfig{
+			RemoteAddr:     c.config.RemoteAddr,
+			Nodelay:        c.config.Nodelay,
+			KeepAlive:      time.Duration(c.config.Keepalive) * time.Second,
+			RetryInterval:  time.Duration(c.config.RetryInterval) * time.Second,
+			DialTimeOut:    time.Duration(c.config.DialTimeout) * time.Second,
+			ConnPoolSize:   c.config.ConnectionPool,
+			Token:          c.config.Token,
+			Sniffer:        c.config.Sniffer,
+			WebPort:        c.config.WebPort,
+			SnifferLog:     c.config.SnifferLog,
+			AggressivePool: c.config.AggressivePool,
+			EdgeIP:         c.config.EdgeIP,
+			Mode:           c.config.Transport,
+		}
+		httpCdnClient := transport.NewHttpCdnClient(c.ctx, httpCdnConfig, c.logger)
+		go httpCdnClient.Start()
 
 	} else if c.config.Transport == config.QUIC {
 		quicConfig := &transport.QuicConfig{
