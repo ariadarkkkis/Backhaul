@@ -22,7 +22,7 @@ var (
 )
 
 // Define the version of the application
-const version = "v0.6.7"
+const version = "v0.6.8"
 
 func main() {
 	configPath = flag.String("c", "", "path to the configuration file (TOML format)")
