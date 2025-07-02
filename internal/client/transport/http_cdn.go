@@ -64,7 +64,6 @@ func NewHttpCdnClient(parentCtx context.Context, config *HttpCdnClientConfig, lo
 
 func (c *HttpCdnClient) Start() {
 	go c.dialControl()
-
 	<-c.ctx.Done()
 }
 
@@ -94,7 +93,7 @@ func (c *HttpCdnClient) Restart() {
 	go c.Start()
 }
 
-func (c *HttpCdnClient) dial() (net.Conn, error) {
+func (c *HttpCdnClient) dial(path string) (net.Conn, error) {
 	var conn net.Conn
 	var err error
 
@@ -112,7 +111,7 @@ func (c *HttpCdnClient) dial() (net.Conn, error) {
 		return nil, err
 	}
 
-	req, _ := http.NewRequest("POST", fmt.Sprintf("/tunnel/%s", uuid.New().String()), nil)
+	req, _ := http.NewRequest("POST", path, nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.config.Token))
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Length", "0")
@@ -126,7 +125,6 @@ func (c *HttpCdnClient) dial() (net.Conn, error) {
 		return nil, err
 	}
 
-	// Check response
 	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 	if err != nil && err != io.EOF {
 		conn.Close()
@@ -146,49 +144,9 @@ func (c *HttpCdnClient) dialControl() {
 		case <-c.ctx.Done():
 			return
 		default:
-			var conn net.Conn
-			var err error
-			dialer := &net.Dialer{
-				Timeout: c.config.DialTimeOut,
-			}
-			if c.config.Mode == config.HTTPCDN {
-				conn, err = dialer.Dial("tcp", c.config.RemoteAddr)
-			} else {
-				conn, err = tls.DialWithDialer(dialer, "tcp", c.config.RemoteAddr, &tls.Config{InsecureSkipVerify: true})
-			}
-
+			conn, err := c.dial(fmt.Sprintf("/control/%s", uuid.New().String()))
 			if err != nil {
 				c.logger.Errorf("failed to dial control channel: %v", err)
-				time.Sleep(c.config.RetryInterval)
-				continue
-			}
-
-			req, _ := http.NewRequest("POST", fmt.Sprintf("/control/%s", uuid.New().String()), nil)
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.config.Token))
-			req.Header.Set("Connection", "keep-alive")
-			req.Header.Set("Content-Length", "0")
-			req.Host = strings.Split(c.config.RemoteAddr, ":")[0]
-			if c.config.EdgeIP != "" {
-				req.Host = c.config.EdgeIP
-			}
-
-			if err := req.Write(conn); err != nil {
-				conn.Close()
-				c.logger.Errorf("failed to write control request: %v", err)
-				time.Sleep(c.config.RetryInterval)
-				continue
-			}
-
-			resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-			if err != nil && err != io.EOF {
-				conn.Close()
-				c.logger.Errorf("failed to read control response: %v", err)
-				time.Sleep(c.config.RetryInterval)
-				continue
-			}
-			if resp.StatusCode != http.StatusOK {
-				conn.Close()
-				c.logger.Errorf("control channel returned non-200 status: %d", resp.StatusCode)
 				time.Sleep(c.config.RetryInterval)
 				continue
 			}
@@ -209,13 +167,13 @@ func (c *HttpCdnClient) maintainConnectionPool() {
 			return
 		default:
 			if len(c.connPool) < c.config.ConnPoolSize {
-				conn, err := c.dial()
+				conn, err := c.dial(fmt.Sprintf("/tunnel/%s", uuid.New().String()))
 				if err != nil {
 					c.logger.Errorf("failed to dial for connection pool: %v", err)
 					time.Sleep(c.config.RetryInterval)
 					continue
 				}
-				c.connPool <- conn
+				go c.handleConnection(conn)
 			} else {
 				time.Sleep(1 * time.Second)
 			}
@@ -231,9 +189,12 @@ func (c *HttpCdnClient) handleControlChannel() {
 			case <-c.ctx.Done():
 				return
 			default:
+				if c.controlChannel == nil {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
 				msg, err := utils.ReceiveBinaryByte(c.controlChannel)
 				if err != nil {
-					c.logger.Error("failed to read from control channel", err)
 					go c.Restart()
 					return
 				}
@@ -250,7 +211,7 @@ func (c *HttpCdnClient) handleControlChannel() {
 			switch msg {
 			case utils.SG_Chan:
 				go func() {
-					conn, err := c.dial()
+					conn, err := c.dial(fmt.Sprintf("/tunnel/%s", uuid.New().String()))
 					if err != nil {
 						c.logger.Errorf("failed to dial new connection: %v", err)
 						return
@@ -271,7 +232,9 @@ func (c *HttpCdnClient) handleControlChannel() {
 func (c *HttpCdnClient) handleConnection(conn net.Conn) {
 	remoteAddr, transport, err := utils.ReceiveBinaryTransportString(conn)
 	if err != nil || transport != utils.SG_TCP {
-		c.logger.Errorf("failed to get remote address or invalid transport: %v", err)
+		if err != io.EOF {
+			c.logger.Errorf("failed to get remote address or invalid transport: %v", err)
+		}
 		conn.Close()
 		return
 	}

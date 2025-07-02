@@ -132,7 +132,6 @@ func (s *HttpCdnTransport) tunnelListener() {
 				return
 			}
 
-			// Hijack the connection
 			hijacker, ok := w.(http.Hijacker)
 			if !ok {
 				http.Error(w, "webserver doesn't support hijacking", http.StatusInternalServerError)
@@ -145,9 +144,11 @@ func (s *HttpCdnTransport) tunnelListener() {
 				return
 			}
 
-			// Write the response directly to the connection
 			resp := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nConnection: keep-alive\r\n\r\n"
-			conn.Write([]byte(resp))
+			if _, err := conn.Write([]byte(resp)); err != nil {
+				conn.Close()
+				return
+			}
 
 			if strings.HasPrefix(r.URL.Path, "/control") {
 				if s.controlChannel != nil {
@@ -228,12 +229,16 @@ func (s *HttpCdnTransport) channelHandler() {
 			case <-s.ctx.Done():
 				return
 			default:
+				if s.controlChannel == nil {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
 				message, err := utils.ReceiveBinaryByte(s.controlChannel)
 				if err != nil {
-					if s.cancel != nil {
+					if !strings.Contains(err.Error(), "use of closed network connection") {
 						s.logger.Error("failed to read from channel connection. ", err)
-						go s.Restart()
 					}
+					go s.Restart()
 					return
 				}
 				messageChan <- message
@@ -244,25 +249,31 @@ func (s *HttpCdnTransport) channelHandler() {
 	for {
 		select {
 		case <-s.ctx.Done():
-			_ = utils.SendBinaryByte(s.controlChannel, utils.SG_Closed)
+			if s.controlChannel != nil {
+				_ = utils.SendBinaryByte(s.controlChannel, utils.SG_Closed)
+			}
 			return
 
 		case <-s.reqNewConnChan:
-			err := utils.SendBinaryByte(s.controlChannel, utils.SG_Chan)
-			if err != nil {
-				s.logger.Error("failed to send request new connection signal. ", err)
-				go s.Restart()
-				return
+			if s.controlChannel != nil {
+				err := utils.SendBinaryByte(s.controlChannel, utils.SG_Chan)
+				if err != nil {
+					s.logger.Error("failed to send request new connection signal. ", err)
+					go s.Restart()
+					return
+				}
 			}
 
 		case <-ticker.C:
-			err := utils.SendBinaryByte(s.controlChannel, utils.SG_HB)
-			if err != nil {
-				s.logger.Error("failed to send heartbeat signal")
-				go s.Restart()
-				return
+			if s.controlChannel != nil {
+				err := utils.SendBinaryByte(s.controlChannel, utils.SG_HB)
+				if err != nil {
+					s.logger.Error("failed to send heartbeat signal")
+					go s.Restart()
+					return
+				}
+				s.logger.Trace("heartbeat signal sent successfully")
 			}
-			s.logger.Trace("heartbeat signal sent successfully")
 
 		case message, ok := <-messageChan:
 			if !ok {
