@@ -144,23 +144,6 @@ func (c *Client) Start() {
 		httpCdnClient := transport.NewHttpCdnClient(c.ctx, httpCdnConfig, c.logger)
 		go httpCdnClient.Start()
 
-	} else if c.config.Transport == config.QUIC {
-		quicConfig := &transport.QuicConfig{
-			RemoteAddr:     c.config.RemoteAddr,
-			Nodelay:        c.config.Nodelay,
-			KeepAlive:      time.Duration(c.config.Keepalive) * time.Second,
-			RetryInterval:  time.Duration(c.config.RetryInterval) * time.Second,
-			DialTimeOut:    time.Duration(c.config.DialTimeout) * time.Second,
-			ConnectionPool: c.config.ConnectionPool,
-			Token:          c.config.Token,
-			Sniffer:        c.config.Sniffer,
-			WebPort:        c.config.WebPort,
-			SnifferLog:     c.config.SnifferLog,
-			AggressivePool: c.config.AggressivePool,
-		}
-		quicClient := transport.NewQuicClient(c.ctx, quicConfig, c.logger)
-		go quicClient.ChannelDialer(true)
-
 	} else if c.config.Transport == config.UDP {
 		udpConfig := &transport.UdpConfig{
 			RemoteAddr:     c.config.RemoteAddr,
