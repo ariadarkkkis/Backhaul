@@ -217,7 +217,7 @@ func SendBinaryByte(conn interface{}, message byte) error {
 	return nil
 }
 
-func ReceiveBinaryByte(conn net.Conn) (byte, error) {
+func ReceiveBinaryByte(conn interface{}) (byte, error) {
 	var messageBuf [1]byte
 
 	switch c := conn.(type) {
