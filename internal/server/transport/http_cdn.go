@@ -379,23 +379,27 @@ func (s *HttpCdnTransport) handleLoop() {
 		case <-s.ctx.Done():
 			return
 		case localConn := <-s.localChannel:
-		loop:
-			for {
-				if time.Now().UnixMilli()-localConn.timeCreated > 3000 {
+			s.reqNewConnChan <- struct{}{} // Request a new tunnel connection
+			s.logger.Debugf("received new local connection from %s, waiting for tunnel connection", localConn.conn.RemoteAddr().String())
+
+			select {
+			case <-s.ctx.Done():
+				return
+			case tunnelConn := <-s.tunnelChannel:
+				s.logger.Debugf("received new tunnel connection from %s, starting to proxy", tunnelConn.RemoteAddr().String())
+				// Send remote address to client
+				err := utils.SendBinaryTransportString(tunnelConn, localConn.remoteAddr, utils.SG_TCP)
+				if err != nil {
+					s.logger.Errorf("failed to send remote address to tunnel connection: %v", err)
+					tunnelConn.Close()
 					localConn.conn.Close()
-					break loop
-				}
-				select {
-				case <-s.ctx.Done():
 					return
-				case tunnelConn := <-s.tunnelChannel:
-					if err := utils.SendBinaryTransportString(tunnelConn, localConn.remoteAddr, utils.SG_TCP); err != nil {
-						tunnelConn.Close()
-						continue loop
-					}
-					go utils.TCPConnectionHandler(localConn.conn, tunnelConn, s.logger, s.usageMonitor, localConn.conn.LocalAddr().(*net.TCPAddr).Port, s.config.Sniffer)
-					break loop
 				}
+				// Handle the connection (e.g., proxy data)
+				go utils.TCPConnectionHandler(tunnelConn, localConn.conn, s.logger, s.usageMonitor, 0, false)
+			case <-time.After(10 * time.Second): // 10s timeout
+				s.logger.Warnf("no tunnel connection received within 10 seconds for local connection from %s, closing connection", localConn.conn.RemoteAddr().String())
+				localConn.conn.Close()
 			}
 		}
 	}
