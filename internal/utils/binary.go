@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-
-	"github.com/quic-go/quic-go"
 )
 
 func SendBinaryString(conn interface{}, message string) error {
@@ -25,10 +23,6 @@ func SendBinaryString(conn interface{}, message string) error {
 	switch c := conn.(type) {
 	case net.Conn:
 		// Send the buffer over the connection
-		if _, err := c.Write(buf); err != nil {
-			return fmt.Errorf("failed to send message: %w", err)
-		}
-	case quic.Stream:
 		if _, err := c.Write(buf); err != nil {
 			return fmt.Errorf("failed to send message: %w", err)
 		}
@@ -95,10 +89,6 @@ func SendBinaryTransportString(conn interface{}, message string, transport byte)
 	switch c := conn.(type) {
 	case net.Conn:
 		// Send the buffer over the connection
-		if _, err := c.Write(buf); err != nil {
-			return fmt.Errorf("failed to send message: %w", err)
-		}
-	case quic.Stream:
 		if _, err := c.Write(buf); err != nil {
 			return fmt.Errorf("failed to send message: %w", err)
 		}
@@ -186,10 +176,6 @@ func SendBinaryByte(conn interface{}, message byte) error {
 
 	switch c := conn.(type) {
 	case net.Conn:
-		if _, err := c.Write(messageBuf[:]); err != nil {
-			return fmt.Errorf("failed to read message from net.Conn: %w", err)
-		}
-	case quic.Stream:
 		if _, err := c.Write(messageBuf[:]); err != nil {
 			return fmt.Errorf("failed to read message from net.Conn: %w", err)
 		}
