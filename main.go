@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// Apply temporary TCP optimizations at startup
-	cmd.ApplyTCPTuning()
+	// cmd.ApplyTCPTuning()
 
 	// Create a context for graceful shutdown handling
 	ctx, cancel = context.WithCancel(context.Background())
